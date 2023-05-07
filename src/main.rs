@@ -16,6 +16,28 @@ struct Cli {
     passwords: Vec<String>,
 }
 
+#[derive(Debug)]
+enum PasswordStatus {
+    Compromised(u32),
+    Safe,
+}
+
+impl PasswordStatus {
+    fn from_count(count: u32) -> PasswordStatus {
+        if count > 0 {
+            PasswordStatus::Compromised(count)
+        } else {
+            PasswordStatus::Safe
+        }
+    }
+}
+
+#[derive(Debug)]
+struct PasswordCheckResult {
+    password: String,
+    status: PasswordStatus,
+}
+
 struct PasswordChecker;
 
 impl PasswordChecker {
@@ -26,6 +48,40 @@ impl PasswordChecker {
         hash.iter()
             .map(|b| format!("{:02x}", b).to_uppercase())
             .collect()
+    }
+
+    async fn check_password(
+        password: &str,
+    ) -> Result<PasswordCheckResult, Box<dyn std::error::Error>> {
+        let password_hash = Self::hash_password(password);
+        let request_url = format!(
+            "https://api.pwnedpasswords.com/range/{}",
+            &password_hash[0..5]
+        );
+        let client = reqwest::Client::new();
+        let response = client.get(&request_url).send().await?.text().await?;
+
+        let suffix = &password_hash[5..];
+        let compromised_count: u32 = response
+            .lines()
+            .filter(|line| line.starts_with(suffix))
+            .fold(0, |count, line| {
+                if line.starts_with(suffix) {
+                    count
+                        + line
+                            .split(':')
+                            .nth(1)
+                            .expect("Failed to parse count")
+                            .parse::<u32>()
+                            .expect("Failed to convert count")
+                } else {
+                    count
+                }
+            });
+        Ok(PasswordCheckResult {
+            password: password.to_string(),
+            status: PasswordStatus::from_count(compromised_count),
+        })
     }
 }
 
