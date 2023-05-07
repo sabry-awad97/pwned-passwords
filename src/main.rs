@@ -125,4 +125,13 @@ mod tests {
         assert_eq!(result.password, "password123");
         assert_eq!(result.status, PasswordStatus::Compromised(251682));
     }
+
+    #[tokio::test]
+    async fn test_check_password_safe() {
+        let result = PasswordChecker::check_password("very_strong_password#123")
+            .await
+            .unwrap();
+        assert_eq!(result.password, "very_strong_password#123");
+        assert_eq!(result.status, PasswordStatus::Safe);
+    }
 }
