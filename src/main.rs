@@ -44,4 +44,12 @@ mod tests {
         let actual_hash = PasswordChecker::hash_password(password);
         assert_eq!(actual_hash, expected_hash);
     }
+
+    #[test]
+    fn test_hash_password_empty() {
+        let password = "";
+        let expected_hash = "DA39A3EE5E6B4B0D3255BFEF95601890AFD80709";
+        let actual_hash = PasswordChecker::hash_password(password);
+        assert_eq!(actual_hash, expected_hash);
+    }
 }
