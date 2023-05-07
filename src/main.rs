@@ -98,8 +98,28 @@ impl PasswordChecker {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Cli::from_args();
+    let results = PasswordChecker::check_passwords(&args.passwords).await?;
+    for result in results {
+        match result.status {
+            PasswordStatus::Compromised(count) => {
+                println!(
+                    "The password '{}' was found in {} data breaches. Please consider using a different password.",
+                    result.password,
+                    count
+                );
+            }
+            PasswordStatus::Safe => {
+                println!(
+                    "The password '{}' has not been found in any known data breaches. Good job!",
+                    result.password
+                );
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
