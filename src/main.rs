@@ -40,6 +40,43 @@ struct PasswordCheckResult {
 
 struct PasswordChecker;
 
+#[derive(Debug)]
+enum PasswordError {
+    RequestError(reqwest::Error),
+    ResponseError(reqwest::Error),
+}
+
+impl From<reqwest::Error> for PasswordError {
+    fn from(error: reqwest::Error) -> Self {
+        PasswordError::RequestError(error)
+    }
+}
+
+impl std::error::Error for PasswordError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            PasswordError::RequestError(error) => Some(error),
+            PasswordError::ResponseError(error) => Some(error),
+        }
+    }
+
+    fn description(&self) -> &str {
+        match self {
+            PasswordError::RequestError(_) => "Error sending request",
+            PasswordError::ResponseError(_) => "Error receiving response",
+        }
+    }
+}
+
+impl std::fmt::Display for PasswordError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PasswordError::RequestError(error) => write!(f, "Error sending request: {}", error),
+            PasswordError::ResponseError(error) => write!(f, "Error receiving response: {}", error),
+        }
+    }
+}
+
 impl PasswordChecker {
     fn hash_password(password: &str) -> String {
         let mut hasher = sha1::Sha1::new();
@@ -50,16 +87,21 @@ impl PasswordChecker {
             .collect()
     }
 
-    async fn check_password(
-        password: &str,
-    ) -> Result<PasswordCheckResult, Box<dyn std::error::Error>> {
+    async fn check_password(password: &str) -> Result<PasswordCheckResult, PasswordError> {
         let password_hash = Self::hash_password(password);
         let request_url = format!(
             "https://api.pwnedpasswords.com/range/{}",
             &password_hash[0..5]
         );
         let client = reqwest::Client::new();
-        let response = client.get(&request_url).send().await?.text().await?;
+        let response = client
+            .get(&request_url)
+            .send()
+            .await
+            .map_err(|error| PasswordError::RequestError(error))?
+            .text()
+            .await
+            .map_err(|error| PasswordError::ResponseError(error))?;
 
         let suffix = &password_hash[5..];
         let compromised_count: u32 = response
@@ -86,7 +128,7 @@ impl PasswordChecker {
 
     async fn check_passwords(
         passwords: &[String],
-    ) -> Result<Vec<PasswordCheckResult>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<PasswordCheckResult>, PasswordError> {
         let futures: Vec<_> = passwords
             .iter()
             .map(|password| Self::check_password(password))
