@@ -14,6 +14,9 @@ struct Cli {
         help = "Passwords to check"
     )]
     passwords: Vec<String>,
+
+    #[structopt(short, long, help = "Check password strength")]
+    strength: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -36,6 +39,7 @@ impl PasswordStatus {
 struct PasswordCheckResult {
     password: String,
     status: PasswordStatus,
+    score: Option<u32>,
 }
 
 struct PasswordChecker;
@@ -120,10 +124,40 @@ impl PasswordChecker {
                     count
                 }
             });
+
+        let score = if compromised_count == 0 {
+            Some(Self::score_password(password))
+        } else {
+            None
+        };
+
         Ok(PasswordCheckResult {
             password: password.to_string(),
             status: PasswordStatus::from_count(compromised_count),
+            score,
         })
+    }
+
+    fn score_password(password: &str) -> u32 {
+        let mut score = 0;
+
+        if password.chars().count() >= 8 {
+            score += 1;
+        }
+        if password.chars().any(|c| c.is_uppercase()) {
+            score += 1;
+        }
+        if password.chars().any(|c| c.is_lowercase()) {
+            score += 1;
+        }
+        if password.chars().any(|c| c.is_numeric()) {
+            score += 1;
+        }
+        if password.chars().any(|c| !c.is_alphanumeric()) {
+            score += 1;
+        }
+
+        score
     }
 
     async fn check_passwords(
@@ -158,6 +192,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "The password '{}' has not been found in any known data breaches. Good job!",
                     result.password
                 );
+            }
+        }
+
+        if args.strength {
+            if let Some(score) = result.score {
+                println!(
+                    "The password strength score for '{}' is {}.",
+                    result.password, score
+                );
+                if score < 3 {
+                    println!("The password strength is weak. Please consider choosing a stronger password.");
+                }
+            } else {
+                println!("Cannot check password strength for password '{}' because it was found in a breach.", result.password);
             }
         }
     }
