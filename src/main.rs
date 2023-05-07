@@ -159,4 +159,18 @@ mod tests {
         let status = PasswordStatus::from_count(12345);
         assert_eq!(status, PasswordStatus::Compromised(12345));
     }
+
+    #[tokio::test]
+    async fn test_check_passwords() {
+        let passwords = vec![
+            "very_strong_password#123".to_string(),
+            "password123".to_string(),
+        ];
+        let results = PasswordChecker::check_passwords(&passwords).await.unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].password, "very_strong_password#123");
+        assert_eq!(results[0].status, PasswordStatus::Safe);
+        assert_eq!(results[1].password, "password123");
+        assert_eq!(results[1].status, PasswordStatus::Compromised(251682));
+    }
 }
