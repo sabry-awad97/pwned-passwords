@@ -83,6 +83,19 @@ impl PasswordChecker {
             status: PasswordStatus::from_count(compromised_count),
         })
     }
+
+    async fn check_passwords(
+        passwords: &[String],
+    ) -> Result<Vec<PasswordCheckResult>, Box<dyn std::error::Error>> {
+        let futures: Vec<_> = passwords
+            .iter()
+            .map(|password| Self::check_password(password))
+            .collect();
+        futures::future::join_all(futures)
+            .await
+            .into_iter()
+            .collect()
+    }
 }
 
 fn main() {
