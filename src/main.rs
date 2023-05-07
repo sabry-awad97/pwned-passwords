@@ -134,4 +134,10 @@ mod tests {
         assert_eq!(result.password, "very_strong_password#123");
         assert_eq!(result.status, PasswordStatus::Safe);
     }
+
+    #[test]
+    fn test_password_status_from_count_safe() {
+        let status = PasswordStatus::from_count(0);
+        assert_eq!(status, PasswordStatus::Safe);
+    }
 }
