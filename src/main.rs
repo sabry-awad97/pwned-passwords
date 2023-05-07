@@ -52,4 +52,12 @@ mod tests {
         let actual_hash = PasswordChecker::hash_password(password);
         assert_eq!(actual_hash, expected_hash);
     }
+
+    #[test]
+    fn test_hash_password_unicode() {
+        let password = "こんにちは";
+        let expected_hash = "20427A708C3F6F07CF12AB23557982D9E6D23B61";
+        let actual_hash = PasswordChecker::hash_password(password);
+        assert_eq!(actual_hash, expected_hash);
+    }
 }
