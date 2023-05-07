@@ -28,6 +28,20 @@ impl PasswordChecker {
             .collect()
     }
 }
+
 fn main() {
     let args = Cli::from_args();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hash_password() {
+        let password = "password123";
+        let expected_hash = "CBFDAC6008F9CAB4083784CBD1874F76618D2A97";
+        let actual_hash = PasswordChecker::hash_password(password);
+        assert_eq!(actual_hash, expected_hash);
+    }
 }
