@@ -60,6 +60,8 @@ struct PasswordChecker;
 enum PasswordError {
     RequestError(reqwest::Error),
     ResponseError(reqwest::Error),
+    FileError(std::io::Error),
+    DatabaseError(String),
 }
 
 impl From<reqwest::Error> for PasswordError {
@@ -68,11 +70,19 @@ impl From<reqwest::Error> for PasswordError {
     }
 }
 
+impl From<std::io::Error> for PasswordError {
+    fn from(error: std::io::Error) -> Self {
+        PasswordError::FileError(error)
+    }
+}
+
 impl std::error::Error for PasswordError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             PasswordError::RequestError(error) => Some(error),
             PasswordError::ResponseError(error) => Some(error),
+            PasswordError::FileError(error) => Some(error),
+            PasswordError::DatabaseError(_) => None,
         }
     }
 
@@ -80,6 +90,8 @@ impl std::error::Error for PasswordError {
         match self {
             PasswordError::RequestError(_) => "Error sending request",
             PasswordError::ResponseError(_) => "Error receiving response",
+            PasswordError::FileError(_) => "Error reading file",
+            PasswordError::DatabaseError(message) => message,
         }
     }
 }
@@ -89,6 +101,8 @@ impl std::fmt::Display for PasswordError {
         match self {
             PasswordError::RequestError(error) => write!(f, "Error sending request: {}", error),
             PasswordError::ResponseError(error) => write!(f, "Error receiving response: {}", error),
+            PasswordError::FileError(error) => write!(f, "Error reading file: {}", error),
+            PasswordError::DatabaseError(message) => write!(f, "{}", message),
         }
     }
 }
@@ -103,12 +117,16 @@ impl PasswordChecker {
             .collect()
     }
 
-    fn load_local_database(path: &str) -> Vec<String> {
-        let file = File::open(path).expect("Failed to open file");
+    fn load_local_database(path: &str) -> Result<Vec<String>, PasswordError> {
+        let file = File::open(path)?;
         let reader = BufReader::new(file);
         reader
             .lines()
-            .map(|line| line.expect("Failed to read line"))
+            .map(|line| {
+                line.map_err(|error| {
+                    PasswordError::DatabaseError(format!("Failed to read line: {}", error))
+                })
+            })
             .collect()
     }
 
@@ -222,7 +240,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Cli::from_args();
     let local_db = match args.local_db {
         Some(path) => {
-            let hashes = PasswordChecker::load_local_database(&path);
+            let hashes = PasswordChecker::load_local_database(&path)?;
             println!(
                 "Loaded {} hashes from the local database at {}",
                 hashes.len(),
@@ -331,7 +349,9 @@ mod tests {
             "very_strong_password#123".to_string(),
             "password123".to_string(),
         ];
-        let results = PasswordChecker::check_passwords(&passwords, None).await.unwrap();
+        let results = PasswordChecker::check_passwords(&passwords, None)
+            .await
+            .unwrap();
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].password, "very_strong_password#123");
         assert_eq!(results[0].status, PasswordStatus::Safe);
