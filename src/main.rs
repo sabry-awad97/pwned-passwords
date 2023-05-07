@@ -376,4 +376,14 @@ mod tests {
         assert_eq!(PasswordChecker::score_password("!@#$%^&*A1"), 4);
         assert_eq!(PasswordChecker::score_password("!@#$%^&*A1a"), 5);
     }
+
+    #[test]
+    fn test_load_local_database() {
+        let result = PasswordChecker::load_local_database("tests/test_db.txt");
+        assert!(result.is_ok());
+        let db = result.unwrap();
+        assert_eq!(db.len(), 2);
+        assert_eq!(db[0], "5BAA61E4C9B93F3F0682250B6CF8331B7EE68FD8:1");
+        assert_eq!(db[1], "7C4A8D09CA3762AF61E59520943DC26494F8941B:2");
+    }
 }
