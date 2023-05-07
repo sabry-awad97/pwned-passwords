@@ -1,3 +1,4 @@
+use sha1::Digest;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -14,6 +15,19 @@ struct Cli {
     )]
     passwords: Vec<String>,
 }
+
+struct PasswordChecker;
+
+impl PasswordChecker {
+    fn hash_password(password: &str) -> String {
+        let mut hasher = sha1::Sha1::new();
+        hasher.update(password.as_bytes());
+        let hash = hasher.finalize();
+        hash.iter()
+            .map(|b| format!("{:02x}", b).to_uppercase())
+            .collect()
+    }
+}
 fn main() {
-    println!("Hello, world!");
+    let args = Cli::from_args();
 }
