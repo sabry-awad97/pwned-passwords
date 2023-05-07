@@ -140,4 +140,10 @@ mod tests {
         let status = PasswordStatus::from_count(0);
         assert_eq!(status, PasswordStatus::Safe);
     }
+
+    #[test]
+    fn test_password_status_from_count_compromised() {
+        let status = PasswordStatus::from_count(12345);
+        assert_eq!(status, PasswordStatus::Compromised(12345));
+    }
 }
