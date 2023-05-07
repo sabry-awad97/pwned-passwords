@@ -1,3 +1,8 @@
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+};
+
 use sha1::Digest;
 use structopt::StructOpt;
 
@@ -17,6 +22,13 @@ struct Cli {
 
     #[structopt(short, long, help = "Check password strength")]
     strength: bool,
+
+    #[structopt(
+        short,
+        long,
+        help = "Path to a local compromised password database file"
+    )]
+    local_db: Option<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -91,39 +103,69 @@ impl PasswordChecker {
             .collect()
     }
 
-    async fn check_password(password: &str) -> Result<PasswordCheckResult, PasswordError> {
-        let password_hash = Self::hash_password(password);
-        let request_url = format!(
-            "https://api.pwnedpasswords.com/range/{}",
-            &password_hash[0..5]
-        );
-        let client = reqwest::Client::new();
-        let response = client
-            .get(&request_url)
-            .send()
-            .await
-            .map_err(|error| PasswordError::RequestError(error))?
-            .text()
-            .await
-            .map_err(|error| PasswordError::ResponseError(error))?;
-
-        let suffix = &password_hash[5..];
-        let compromised_count: u32 = response
+    fn load_local_database(path: &str) -> Vec<String> {
+        let file = File::open(path).expect("Failed to open file");
+        let reader = BufReader::new(file);
+        reader
             .lines()
-            .filter(|line| line.starts_with(suffix))
-            .fold(0, |count, line| {
-                if line.starts_with(suffix) {
-                    count
-                        + line
-                            .split(':')
-                            .nth(1)
-                            .expect("Failed to parse count")
-                            .parse::<u32>()
-                            .expect("Failed to convert count")
-                } else {
-                    count
-                }
-            });
+            .map(|line| line.expect("Failed to read line"))
+            .collect()
+    }
+
+    async fn check_password(
+        password: &str,
+        local_db: Option<&Vec<String>>,
+    ) -> Result<PasswordCheckResult, PasswordError> {
+        let password_hash = Self::hash_password(password);
+        let compromised_count: u32 = if let Some(db) = local_db {
+            db.iter()
+                .filter(|hash| hash.starts_with(&password_hash[..5]))
+                .fold(0, |count, hash| {
+                    if hash == &password_hash[..] {
+                        count
+                            + hash
+                                .split(':')
+                                .nth(1)
+                                .expect("Failed to parse count")
+                                .parse::<u32>()
+                                .expect("Failed to convert count")
+                    } else {
+                        count
+                    }
+                })
+        } else {
+            let request_url = format!(
+                "https://api.pwnedpasswords.com/range/{}",
+                &password_hash[0..5]
+            );
+            let client = reqwest::Client::new();
+            let response = client
+                .get(&request_url)
+                .send()
+                .await
+                .map_err(|error| PasswordError::RequestError(error))?
+                .text()
+                .await
+                .map_err(|error| PasswordError::ResponseError(error))?;
+
+            let suffix = &password_hash[5..];
+            response
+                .lines()
+                .filter(|line| line.starts_with(suffix))
+                .fold(0, |count, line| {
+                    if line.starts_with(suffix) {
+                        count
+                            + line
+                                .split(':')
+                                .nth(1)
+                                .expect("Failed to parse count")
+                                .parse::<u32>()
+                                .expect("Failed to convert count")
+                    } else {
+                        count
+                    }
+                })
+        };
 
         let score = if compromised_count == 0 {
             Some(Self::score_password(password))
@@ -162,10 +204,11 @@ impl PasswordChecker {
 
     async fn check_passwords(
         passwords: &[String],
+        local_db: Option<&Vec<String>>,
     ) -> Result<Vec<PasswordCheckResult>, PasswordError> {
         let futures: Vec<_> = passwords
             .iter()
-            .map(|password| Self::check_password(password))
+            .map(|password| Self::check_password(password, local_db))
             .collect();
         futures::future::join_all(futures)
             .await
@@ -177,7 +220,19 @@ impl PasswordChecker {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Cli::from_args();
-    let results = PasswordChecker::check_passwords(&args.passwords).await?;
+    let local_db = match args.local_db {
+        Some(path) => {
+            let hashes = PasswordChecker::load_local_database(&path);
+            println!(
+                "Loaded {} hashes from the local database at {}",
+                hashes.len(),
+                path
+            );
+            Some(hashes)
+        }
+        None => None,
+    };
+    let results = PasswordChecker::check_passwords(&args.passwords, local_db.as_ref()).await?;
     for result in results {
         match result.status {
             PasswordStatus::Compromised(count) => {
@@ -242,7 +297,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_check_password_compromised() {
-        let result = PasswordChecker::check_password("password123")
+        let result = PasswordChecker::check_password("password123", None)
             .await
             .unwrap();
         assert_eq!(result.password, "password123");
@@ -251,7 +306,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_check_password_safe() {
-        let result = PasswordChecker::check_password("very_strong_password#123")
+        let result = PasswordChecker::check_password("very_strong_password#123", None)
             .await
             .unwrap();
         assert_eq!(result.password, "very_strong_password#123");
@@ -276,7 +331,7 @@ mod tests {
             "very_strong_password#123".to_string(),
             "password123".to_string(),
         ];
-        let results = PasswordChecker::check_passwords(&passwords).await.unwrap();
+        let results = PasswordChecker::check_passwords(&passwords, None).await.unwrap();
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].password, "very_strong_password#123");
         assert_eq!(results[0].status, PasswordStatus::Safe);
