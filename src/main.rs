@@ -16,7 +16,7 @@ struct Cli {
     passwords: Vec<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum PasswordStatus {
     Compromised(u32),
     Safe,
@@ -115,5 +115,14 @@ mod tests {
         let expected_hash = "20427A708C3F6F07CF12AB23557982D9E6D23B61";
         let actual_hash = PasswordChecker::hash_password(password);
         assert_eq!(actual_hash, expected_hash);
+    }
+
+    #[tokio::test]
+    async fn test_check_password_compromised() {
+        let result = PasswordChecker::check_password("password123")
+            .await
+            .unwrap();
+        assert_eq!(result.password, "password123");
+        assert_eq!(result.status, PasswordStatus::Compromised(251682));
     }
 }
