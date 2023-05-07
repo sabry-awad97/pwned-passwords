@@ -283,4 +283,22 @@ mod tests {
         assert_eq!(results[1].password, "password123");
         assert_eq!(results[1].status, PasswordStatus::Compromised(251682));
     }
+
+    #[test]
+    fn test_score_password() {
+        assert_eq!(PasswordChecker::score_password("password"), 2);
+        assert_eq!(PasswordChecker::score_password("Password"), 3);
+        assert_eq!(PasswordChecker::score_password("Password1"), 4);
+        assert_eq!(PasswordChecker::score_password("Password1!"), 5);
+        assert_eq!(PasswordChecker::score_password("12345678"), 2);
+        assert_eq!(PasswordChecker::score_password("1234567a"), 3);
+        assert_eq!(PasswordChecker::score_password("1234567A"), 3);
+        assert_eq!(PasswordChecker::score_password("1234567A!"), 4);
+        assert_eq!(PasswordChecker::score_password("!@#$%^&*"), 2);
+        assert_eq!(PasswordChecker::score_password("!@#$%^&*a"), 3);
+        assert_eq!(PasswordChecker::score_password("!@#$%^&*A"), 3);
+        assert_eq!(PasswordChecker::score_password("!@#$%^&*1"), 3);
+        assert_eq!(PasswordChecker::score_password("!@#$%^&*A1"), 4);
+        assert_eq!(PasswordChecker::score_password("!@#$%^&*A1a"), 5);
+    }
 }
